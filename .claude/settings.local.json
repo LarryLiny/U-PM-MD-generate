@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C ~/.claude/skills/demotomd status)",
+      "Bash(gh repo:*)"
+    ]
+  }
+}
