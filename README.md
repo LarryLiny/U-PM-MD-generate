@@ -50,3 +50,37 @@ PM_Requirement/
 | `references/demo-analysis-guide.md` | demo 代码分析方法论 |
 | `references/requirement-template.md` | 三类产出文档的模板结构 |
 | `product-workflow.md` | PM 使用 demo 和 demotomd 交付需求的完整工作流 |
+
+## 安装（分享给他人）
+
+clone 本仓库后，把 skill 文件复制到你的 AI 编程工具对应的 skill 目录即可。
+
+**需要复制的核心文件**：
+
+- `SKILL.md`
+- `references/`（整个目录，含 `requirement-template.md`、`demo-analysis-guide.md`）
+- `product-workflow.md`
+
+**各工具的目标目录**：
+
+| 工具 | 目标目录 |
+|------|----------|
+| Claude Code | `~/.claude/skills/demotomd/` |
+| Kiro | `~/.kiro/skills/demotomd/` |
+| Codex | `~/.codex/skills/demotomd/` |
+
+复制命令（以 Claude Code 为例）：
+
+```bash
+git clone https://github.com/LarryLiny/U-PM-MD-generate.git demotomd-src
+mkdir -p ~/.claude/skills/demotomd
+cp demotomd-src/SKILL.md demotomd-src/product-workflow.md ~/.claude/skills/demotomd/
+cp -r demotomd-src/references ~/.claude/skills/demotomd/
+```
+
+**可选文件**（按需取用）：
+
+- `project-instructions/CLAUDE.md` / `kiro-steering.md` / `AGENTS.md`：放到你的 demo 项目根目录，实现"改完 demo 源码后自动同步需求文档"
+- `scripts/check-sync-needed.sh`：Claude Code 的 Stop hook，session 结束时自动检测并提醒同步（配置方式见 `SKILL.md` 的「Hook 自动提醒」章节）
+
+安装后在对应工具里说"同步需求文档"、"demo 改完了更新一下 requirement"，或直接输入 `/demotomd` 即可触发。
