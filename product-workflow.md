@@ -4,6 +4,29 @@
 
 ---
 
+## 背景定位
+
+产品经理在本地用 AI 编程工具开发 demo，核心目的是给业务方演示、讨论和确认需求。这个 demo 可以跑通业务流程，但它不是线上工程，也不能直接部署到生产环境。
+
+demo 与正式研发项目最大的差异通常在后端：
+
+| 部分 | demo 中的特点 | 交付给研发时的处理 |
+|------|--------------|------------------|
+| 前端页面与交互 | PM 和业务方通过实际操作确认，参考价值高 | 尽量沉淀为 UI/研发/测试都能理解的页面、流程、状态和交互说明 |
+| 后端/API/数据 | 可能写死、mock、本地存储、伪接口、简化权限 | 只提取业务规则和正式能力要求，不要求研发照搬 demo 后端代码 |
+| AI/知识库能力 | 可能用静态内容模拟生成结果 | 说明正式需要接入模型、提示词、知识库、内容安全和降级策略 |
+| 权限/登录 | 可能用固定账号或前端隐藏实现 | 说明正式需要统一登录、角色权限、接口级鉴权和审计 |
+
+因此 demotomd 的目标不是“把 demo 代码解释给研发照着写”，而是把 demo 中已经被验证过的产品意图，翻译成三个角色能直接使用的文档：
+
+1. `PM_Requirement/Requirement_[版本号]/[项目名]_requirement_[版本号].md`：给研发 Agent 的需求文档，首次交付为完整需求，后续默认是增量需求。
+2. `PM_Requirement/Requirement_[版本号]/[项目名]_ui_requirement_[版本号].md`：给 UI 的界面与交互说明，帮助 UI 在 Figma 中快速生成接近 demo 的界面并继续优化。
+3. `PM_Requirement/Requirement_[版本号]/[项目名]_test_requirement_[版本号].md`：给测试的验收与测试设计说明，帮助测试生成测试用例、覆盖极限场景并区分主流程优先级。
+
+如果项目来自线上项目，且已经包含真实服务端和数据库改造，demotomd 会先检测技术栈并询问 PM：线上正式项目是否同技术栈、是否需要按当前服务端/数据库实现额外输出 `_server_requirement.md`。只有 PM 确认后，才会生成服务端需求文档。
+
+---
+
 ## 整体流程概览
 
 ```mermaid
@@ -17,9 +40,11 @@ flowchart TB
     F --> G[研发需求文档]
     F --> H[UI 需求文档]
     F --> I[测试需求文档]
+    F -. 可选 .-> M[服务端需求文档]
     G --> J[研发团队]
     H --> K[UI 设计师]
     I --> L[测试团队]
+    M -. 用户确认同技术栈后 .-> N[后端研发 / 后端 Agent]
 
     style F fill:#4A90D9,color:#fff
     style G fill:#67C23A,color:#fff
@@ -90,7 +115,7 @@ flowchart TB
     PROMPT["PM 的 prompt:<br/>加一个满5000元打9折的批量订购优惠<br/>只有审核通过的订单才能享受"]
 
     PROMPT --> STEP1["① 源码检测"]
-    PROMPT --> STEP2["② 对话语图分析"]
+    PROMPT --> STEP2["② 对话意图分析"]
     PROMPT --> STEP3["③ 一致性兜底"]
 
     subgraph STEP1 ["来源1: 源码文件变更"]
@@ -151,14 +176,16 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    DOCS[4 份文档产出] --> DEV[研发需求文档<br/>_requirement.md]
+    DOCS[3 份核心文档 + 1 份可选文档] --> DEV[研发需求文档<br/>_requirement.md]
     DOCS --> UI[UI 需求文档<br/>_ui_requirement.md]
     DOCS --> TEST[测试需求文档<br/>_test_requirement.md]
+    DOCS -. 条件生成 .-> SERVER[服务端需求文档<br/>_server_requirement.md]
     DOCS --> LOG[变更日志<br/>_Requirement_log.md]
 
     DEV --> DEV_TEAM[研发团队的 AI 编程工具<br/>直接读取文档作为需求输入]
     UI --> UI_TEAM[UI 设计师<br/>出设计稿 + 修正交互问题]
     TEST --> TEST_TEAM[测试团队的 AI Agent<br/>直接转化为测试用例]
+    SERVER -. 技术栈相同且用户确认 .-> SERVER_TEAM[后端研发 / 后端 Agent<br/>理解服务端能力和数据库改造]
 
     LOG -.-> |所有角色可查| ALL[审计追溯]
 
@@ -175,7 +202,8 @@ flowchart TB
 | 研发 | `_requirement.md` + 可操作 Demo | 把文档喂给自己的 AI 编程工具（Kiro/Claude Code），按文档开发。遇到不清楚的操作 Demo 体验 |
 | UI 设计师 | `_ui_requirement.md` + 可操作 Demo | 按 7 态矩阵出设计稿、补 Icon、修正交互问题、确认响应式方案 |
 | 测试 | `_test_requirement.md` | 测试 AI Agent 读取文档，直接生成测试用例。PM 不需要再单独写测试需求 |
-| 所有人 | `_Requirement_log.md` | 查看历次变更记录，知道每次改了什么 |
+| 后端研发 | `_server_requirement.md`（可选） | 仅当线上项目同技术栈且 PM 确认需要时生成，用于理解服务端能力、数据库改造、权限、异常和集成要求 |
+| 所有人 | `PM_Requirement/[项目名]_Requirement_log.md` | 查看历次变更记录，知道每次改了什么 |
 
 ---
 
@@ -183,21 +211,38 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    TRIGGER[触发同步] --> MODE{文档是否存在且有 @meta?}
-    MODE -- 不存在 / 首次 --> FULL[full-rewrite<br/>全量生成]
-    MODE -- 存在，距上次全量 > 7天 --> REFRESH[full-refresh<br/>全量刷新但保留自定义内容]
-    MODE -- 存在，增量 --> INC[incremental<br/>只改受影响章节]
+    TRIGGER[触发同步] --> SCAN[扫描 PM_Requirement 下已有 Requirement_版本号 文件夹]
+    SCAN --> VERSION[生成本次版本号<br/>MMDD + 当日自增3位<br/>如 0622001 / 0622002]
+    SCAN --> BASE{是否存在上一版?}
 
-    FULL --> WRITE[Write 工具写入完整文档]
+    BASE -- 否 --> FULL[full<br/>首次全量交付]
+    BASE -- 是 --> INC[incremental<br/>相对上一版增量交付]
+    BASE -- 用户要求全量 --> REFRESH[full-refresh<br/>重新全量交付]
+
+    VERSION --> DIR[创建 PM_Requirement/Requirement_版本号 文件夹]
+    FULL --> WRITE[写入完整三类核心文档]
     REFRESH --> WRITE
-    INC --> EDIT[Edit 工具精准修改<br/>不改其他内容，省 token]
+    INC --> DELTA[只写新增 / 变更 / 废弃内容<br/>未提及内容沿用上一版]
 
-    WRITE --> LOG_APPEND[Requirement_log.md 追加记录]
-    EDIT --> LOG_APPEND
+    WRITE --> MANIFEST[生成 version-manifest.md]
+    DELTA --> MANIFEST
+    MANIFEST --> LOG_APPEND[PM_Requirement 下 Requirement_log.md 追加记录]
 
     style INC fill:#67C23A,color:#fff
-    style EDIT fill:#67C23A,color:#fff
+    style DELTA fill:#67C23A,color:#fff
 ```
+
+版本目录规则：
+
+| 项 | 规则 |
+|----|------|
+| 统一根目录 | `PM_Requirement/` |
+| 批次目录名 | `PM_Requirement/Requirement_版本号` |
+| 版本号 | 当天日期 `MMDD` + 当天自增 3 位，例如 `0622001`、`0622002` |
+| 首次交付 | 输出完整需求文档 |
+| 后续交付 | 默认输出相对上一版的增量文档 |
+| 增量含义 | 只写本次新增、变更、废弃、待确认内容；未提及内容沿用上一版 |
+| 版本说明 | 每个批次目录必须包含 `version-manifest.md` |
 
 ---
 
@@ -209,11 +254,14 @@ flowchart TB
 |------|-------------|-----------|-------------|
 | **1** | **产品概述** — 产品描述 + 目标用户，让研发理解业务背景 | **页面结构与导航** — 页面清单 + 参数传递对 UI 的影响 | **测试范围与优先级** — 功能清单 + P0/P1/P2 + 变更 vs 未变更 |
 | **2** | **页面结构与导航** — 页面清单 + 导航关系 + **页面间参数传递** | **交互状态清单** — 每个元素的**7态矩阵**（默认/hover/激活/loading/禁用/错误/空态） + 弹窗浮层 + 反馈提示 | **业务逻辑验收标准** — 每个功能的详细 AC（前置条件 + 测试步骤 + 测试数据 + 预期结果） |
-| **3** | **功能逻辑** — 操作流程（流程图）+ 状态机（图+表）+ 交互规则 + 校验规则 + 4类极限场景 + 验收标准 | **视觉元素需求清单** — Icon 需求（哪些用文字/emoji代替了）+ 插图/空状态图 + 占位图/默认图 | **角色与权限测试矩阵** — 每个角色 × 每个功能点的权限（可见/可操作/隐藏/禁用） |
+| **3** | **功能逻辑** — 操作流程（流程图）+ 状态机（图+表）+ 交互规则 + 校验规则 + 5类极限场景 + 验收标准 | **视觉元素需求清单** — Icon 需求（哪些用文字/emoji代替了）+ 插图/空状态图 + 占位图/默认图 | **角色与权限测试矩阵** — 每个角色 × 每个功能点的权限（可见/可操作/隐藏/禁用） |
 | **4** | **业务规则** — 计算规则（公式）+ 条件逻辑（展示/隐藏/启用/禁用）+ 数据处理规则 | **交互问题标注** — 交互逻辑问题 + 缺失的交互反馈 + 响应式适配需求 | **状态流转测试** — 合法转换 + 非法转换，每条含预期 UI 变化 |
-| **5** | **数据模型** — 核心实体字段 + **Mock 数据说明**（哪些是假的，正式要对接什么） | **组件复用说明** — 重复 UI 模式 + 现有设计系统复用情况 | **极限场景测试清单** — 4类：内容溢出 / 空内容 / 网络异常 / 操作异常 |
+| **5** | **数据模型** — 核心实体字段 + **Mock 数据说明**（哪些是假的，正式要对接什么） | **组件复用说明** — 重复 UI 模式 + 现有设计系统复用情况 | **极限场景测试清单** — 5类：内容溢出 / 空内容 / 网络异常 / 操作异常 / 并发与竞态 |
 | **6** | **已知缺口** — 简化逻辑 + 缺失功能 + TODO/FIXME，明确告知哪些需要重写 | — | **数据边界测试** — 每个字段的正常值 / 边界值 / 异常值 |
 | **7** | **数据埋点** — 核心指标 + 页面浏览 + 用户行为 + 业务事件 | — | **回归测试建议** — 冒烟测试清单 + 关联功能回归 |
+| **8** | — | — | **已知 Bug 与缺陷标记** — demo 中 bug/写死/TODO，测试标 xfail |
+| **9** | — | — | **特殊字符/多语言/Emoji** — 国际化与字符兼容性 |
+| **10** | — | — | **接口错误场景测试（业务级）** — 参数错误/无权限/不存在/冲突/超时 |
 
 ### 各文档的撰写着重点
 
@@ -224,7 +272,10 @@ flowchart TB
 > 核心读者是 UI 设计师。每个交互元素必须覆盖 7 种状态（默认/hover/激活/loading/禁用/错误/空态），列出所有需要设计的 Icon、插图、空状态图，标注 demo 中的交互问题。着重点是补齐 demo 中粗糙或缺失的视觉元素。
 
 **测试需求文档** — 聚焦 **"怎么验证"**
-> 核心读者是测试团队的 AI Agent。每个 AC 都包含具体的测试步骤、测试数据和预期结果，可直接转化为测试用例。覆盖角色权限矩阵、状态合法/非法转换、4 类极限场景、每个字段的数据边界。着重点是确保所有业务路径都有对应的验证点。
+> 核心读者是测试团队的 AI Agent。每个 AC 都包含具体的测试步骤、测试数据和预期结果，可直接转化为测试用例，且必须过断言化试金石（能写成 expect().toBe(具体值)）与可测性三问。覆盖角色权限矩阵、状态合法/非法转换、5 类极限场景、每个字段的数据边界、已知 Bug、特殊字符、接口错误场景。着重点是确保所有业务路径都有对应的验证点。
+
+**服务端需求文档（可选）** — 聚焦 **"后端怎么承接"**
+> 只有检测到真实服务端/数据库能力，并且 PM 确认线上正式项目同技术栈时才生成。它描述服务端能力、数据模型、数据库迁移、权限、异常、外部依赖和待确认问题；如果 PM 不需要，则不输出这份文档，避免把演示后端误当成正式实现。
 
 ---
 
@@ -257,10 +308,13 @@ timeline
         上午 : 业务方确认 Demo，PM 做最后一轮微调
         下午 : 最终调用 demotomd 生成终版文档
               产出:
-              BookOrder_requirement.md — 研发需求文档（7章，含完整状态机）
-              BookOrder_ui_requirement.md — UI需求文档（5章，含7态矩阵）
-              BookOrder_test_requirement.md — 测试需求文档（7章，含86条AC）
-              BookOrder_Requirement_log.md — 变更日志（12次同步记录）
+              PM_Requirement/
+                Requirement_0622001/
+                  BookOrder_requirement_0622001.md — 研发需求文档（7章，含完整状态机）
+                  BookOrder_ui_requirement_0622001.md — UI需求文档（5章，含7态矩阵）
+                  BookOrder_test_requirement_0622001.md — 测试需求文档（10章，含86条AC）
+                  version-manifest.md — 本次交付说明
+                BookOrder_Requirement_log.md — 变更日志（12次同步记录）
     section Day 5 : 文档交付
         上午 : _requirement.md 交给研发 → 研发 AI 工具直接读取开始开发
                _ui_requirement.md 交给 UI → 出设计稿
@@ -274,10 +328,11 @@ timeline
 
 | 场景 | PM 操作 | 结果 |
 |------|--------|------|
-| 改完 demo，主动同步 | 输入 `/demotomd` 或 "同步需求文档" | 增量更新受影响的文档 |
+| 改完 demo，主动同步 | 输入 `/demotomd` 或 "同步需求文档" | 创建新的 `PM_Requirement/Requirement_版本号` 文件夹，输出本次增量文档 |
 | 忘了同步就结束 session | Hook 自动检测并提醒 | 提醒"源码比文档新，建议同步" |
 | 只描述了后端逻辑 | 正常对话，结束时同步 | 文档仍会更新（对话意图检测） |
-| 大改版，想全部重新生成 | 删除现有 MD 文件，再调用 demotomd | 全量重写所有文档 |
+| 项目包含真实服务端和数据库 | demotomd 先询问线上是否同技术栈、是否需要服务端文档 | PM 确认后额外生成 `_server_requirement.md`；不确认则跳过 |
+| 大改版，想全部重新生成 | 明确说“本次全量交付”或“重新生成完整需求包” | 创建新的 `PM_Requirement/Requirement_版本号` 文件夹，输出全量文档 |
 | 只想改文档措辞 | 直接编辑 MD 文件 | 不触发代码分析 |
 
 ---
