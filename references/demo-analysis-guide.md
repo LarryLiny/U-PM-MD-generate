@@ -237,8 +237,15 @@ demotomd 面向的不是生产工程，而是产品经理用 AI 编程工具快�
 **操作要求**：
 1. 逐行检查原型中的每一个上述控件，先全部列出，再做合并判断
 2. 搜索/筛选区的每个独立筛选项都是独立元素，不可因交互模式相似就省略
-3. 每个控件记录：元素名、所在页面、触发行为、所有状态（默认/hover/激活/loading/禁用/错误/空态）、关联的业务规则
+3. 每个控件记录**全部状态**（默认 / hover / 聚焦 / 点击 / 激活 / loading / 禁用 / 报错 / 空态），从以下状态变量与条件渲染中提取：
+   - `disabled` / `readOnly` → 禁用态及触发条件
+   - `isLoading` / `isFetching` / `isPending` → loading 态
+   - `isError` / `error` / `try-catch` 块 → 报错态与错误文案
+   - `isEmpty` / `.length === 0` / `!data` → 空态
+   - `:hover` / `onMouseEnter` / `isHovered` / `:focus` / `isFocused` → hover / 聚焦态
+   - `isActive` / `selected` / `checked` → 激活 / 选中态
 4. 控件驱动下游逻辑的（如某 Checkbox 控制后续字段显隐），必须记录联动关系
+5. **登录态与角色差异**：识别路由守卫、`isAuthenticated` / `token` / `role` / `permission` 判断、未登录时的条件渲染（显示登录引导还是跳转登录页）、token 过期处理（401 拦截 / 登录失效跳转），记录每个功能在未登录 / token 过期 / 不同角色下的可见性与可操作性差异
 
 ---
 
